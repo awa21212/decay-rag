@@ -1,153 +1,145 @@
 # decay-rag — time belongs in the ranking, per chunk
 
-**一个 235 行、零依赖的检索内核，四种形态。** 它只坚持一件事：
+**A 235-line, zero-dependency retrieval kernel, shipped in four shapes.** It insists on one thing only:
 
-> **时间戳必须落在块上，不是落在文件上。**
+> **Timestamps belong to chunks, not to files.**
 
-`score = 0.75 × similarity + 0.25 × decay`，半衰期 30 天。没有向量库、没有 `pip install`、
-没有 GPU、没有嵌入服务。只有 Python 3。
-
----
-
-## 为什么"文件时间"是错的
-
-每个人给检索"加时间"都是取文件的 `mtime`。这在最常见的个人语料上直接失效：
-
-**一本日记、一份周报、一个追加型日志 —— 一个大文件被追加几年，每个块共享同一个 `mtime`，衰减等于没做。**
-
-所以时间戳要按块决定，优先级是：
-
-1. **文件名里的日期** —— `决策记录_2026-11-06.md` → `2026-11-06`（最可靠，起名就有）
-2. **块内离 `mtime` 最近的那个日期** —— *不是第一个*
-3. `Oct 31` / `10-31` 这类简写（年份按 `mtime` 推断）
-4. 都找不到 → 回退 `mtime`
-
-第 2 条是容易踩的点。一份报告常以「审计期间 2019-01-02 至 2025-12-31」开头；取第一个日期，
-整块被标成 2019，衰减≈0，它永远排不上来。**写作时间总是靠近 `mtime`，历史日期总是远离它。**
+`score = 0.75 × similarity + 0.25 × decay`, 30-day half-life. No vector database, no `pip install`, no GPU, no embedding service. Just Python 3.
 
 ---
 
-## 四种形态（同一套算法）
+## Why "file time" is wrong
 
-| 目录 | 是什么 | 什么时候用它 |
+Almost everyone who adds time to retrieval reaches for the file's `mtime`. On the most common personal corpora that fails immediately:
+
+**A diary, a weekly report, an append-only log — one big file that grows for years. Every chunk shares the same `mtime`, so the decay term does nothing.**
+
+So the timestamp is decided per chunk, in this priority order:
+
+1. **A date in the filename** — `decision_2026-11-06.md` → `2026-11-06` (most reliable; naming it is enough)
+2. **The date inside the chunk that is *closest to* `mtime`** — not the first one
+3. Shorthand forms like `Oct 31` / `10-31` (year inferred from `mtime`)
+4. Nothing found → fall back to `mtime`
+
+Rule 2 is the easy trap. A report often opens with "audit period: 2019-01-02 to 2025-12-31". Take the first date and the whole chunk is stamped 2019, decay ≈ 0, and it never ranks. **When a document was written is always near `mtime`; historical dates are always far from it.**
+
+---
+
+## Four shapes, one algorithm
+
+| Directory | What it is | When to use it |
 |---|---|---|
-| [`core/`](core/) | **单文件** `decay_rag.py`（235 行）+ `demo.py` + 测试 | 想读懂算法、或把 `parse_chunk_ts()` 抠出来移植到自己的 RAG |
-| [`four_corpus/`](four_corpus/) | 多语料库运行版：`code` / `finance` / `task` / `life` 四套独立索引 + 建库、查询、开工前自查三个 CLI | 笔记按主题分家，不想让「docker 报错」被日记里的句子回答 |
-| [`polyglot/`](polyglot/) | 同一份 `SPEC.md` 的 **C / C++ / Go / Java / JS / Python** 六种实现，输出逐字节一致 | 想知道这套打分能不能跨语言复现（能，而且因此抓出一个真 bug） |
-| [`plugin/dsh/`](plugin/dsh/) | DeepSeek Harness 插件：每步前自动检索并注入，另给模型一个 `rag_search` 工具 | 想让 agent 每次开工前先读自己的方法库 |
+| [`core/`](core/) | **Single file** `decay_rag.py` (235 lines) + `demo.py` + tests | You want to read the algorithm, or lift `parse_chunk_ts()` into your own RAG |
+| [`four_corpus/`](four_corpus/) | Multi-corpus runtime: four independent indexes (`code` / `finance` / `task` / `life`) with build / query / pre-work check CLIs | Your notes are split by topic and you do not want a diary line answering "docker build failed" |
+| [`polyglot/`](polyglot/) | The same `SPEC.md` implemented six times — **C / C++ / Go / Java / JS / Python** — byte-identical output | You want to know whether this scoring survives a language change (it does, and the exercise found a real bug) |
+| [`plugin/dsh/`](plugin/dsh/) | DeepSeek Harness plugin: retrieves and injects before every step, plus a `rag_search` tool for the model | You want an agent to read its own method library before starting work |
 
-`spec/SPEC.md` 是唯一的实现契约（切块、时间戳、哈希、打分、输出格式），六种语言都按它写。
+`spec/SPEC.md` is the only implementation contract (chunking, timestamps, hashing, scoring, output format). All six languages follow it.
 
 ---
 
-## 数字，照实说
+## The numbers, as they are
 
-同一语料、同一批题（19 道留出题，作者不参与措辞）：
+Same corpus, same questions (19 held-out questions; the author did not write the wording):
 
-| 形态 | 命中第一 | 备注 |
+| Shape | hit@1 | Note |
 |---|---|---|
-| `core/` 零依赖字符 n-gram | **14/19（74%）** | 不需要任何模型 |
-| `four_corpus/` 混合 + 时间 + 卡片优先 | **17/19（89%）** | 前三 18/19 |
-| 纯向量（bge-m3） | 13/19 | 1.2 GB 模型 |
-| 纯向量 + RRF 融合 | 13/19 | 融合在这里是**负**优化 |
-| bge-m3 混合 + 结构项 | 17/19 | 与第二行同分，代价是模型 |
+| `core/` zero-dependency character n-gram | **14/19 (74%)** | No model at all |
+| `four_corpus/` hybrid + time + card prior | **17/19 (89%)** | 18/19 in the top three |
+| Dense only (bge-m3) | 13/19 | 1.2 GB model |
+| Dense + RRF fusion | 13/19 | Fusion is a **negative** optimisation here |
+| bge-m3 hybrid + structural terms | 17/19 | Ties with row 2, at the cost of a model |
 
-**多语料库真正解决的是什么**（8 道带标签题，每库 2 道）：
+**What the multi-corpus split actually buys you** (8 labelled questions, 2 per corpus):
 
-| 口径 | 命中 |
+| Setting | Hits |
 |---|---|
-| 只查对的库 | **1.00** |
-| 四个库一起查 | **1.00** |
-| 用错的库答全部题 | 0.25 |
+| Query the right corpus only | **1.00** |
+| Query all four at once | **1.00** |
+| Answer everything with the wrong corpus | 0.25 |
 
-**它在哪崩**（每道题加 1 个"复述问题原话"的干扰块，最坏情况）：
+**Where it breaks** (one decoy per question that restates the question, worst case):
 
 ```
-9 块 → 1.00    17 块 → 0.62    25 块 → 0.62    41 块 → 0.50    137 块 → 0.50
+9 chunks -> 1.00    17 -> 0.62    25 -> 0.62    41 -> 0.50    137 -> 0.50
 ```
 
-**加一个近义干扰项就掉到 62%。** 这套方法是**针检索器，不是语义检索器**：
-你的笔记各说各的、措辞独特 → 它赢；语料里全是复述同一句话的长段落 → 它输。
+**A single near-duplicate decoy drops it to 62%.** This is a **needle retriever, not a semantic retriever**: unique, distinctly worded notes and it wins; a corpus of paragraphs that paraphrase the same sentence and it loses.
 
-**跨语言一致性**（600 块，单次查询）：
+**Cross-language consistency** (600 chunks, single query):
 
 | Go | C++ | C | Node.js | Java | Python |
 |---|---|---|---|---|---|
 | 95 ms | 118 ms | 161 ms | 356 ms | 384 ms | 1326 ms |
 
-六份输出 **md5 相同**。这个对照本身抓到了一个真 bug：C 端口有个 512 块的静态数组，
-600 块时溢出——其余五种语言都没事。
+All six outputs share the **same md5**. That comparison earned its keep: the C port had a static 512-chunk array that overflowed at 600 chunks. The other five were fine.
 
 ---
 
-## 它不适合什么
+## What it is not for
 
-- **同义词**：「暂停」和「保护性挂起」在字符 n-gram 里没关系。要这个就上嵌入模型。
-- **多跳 / 汇总**：「我今年在基础设施上踩了几个坑」需要读完全部块再数，不是排序问题。
-- **大语料**：暴力余弦没做 ANN，五万块以上请换方案。
-- **当产品用**：没有 UI、没有 PDF/Office 解析、没有数据库、没有对话编排。
-  要产品级看 LlamaIndex / LangChain / RAGFlow / Dify；这里给的是**能读懂、能改、能嵌进去的 200 行**。
+- **Synonyms**: "paused" and "protectively suspended" have nothing in common in character n-grams. Use an embedding model for that.
+- **Multi-hop / aggregation**: "how many infra mistakes did I make this year" requires reading every chunk and counting, not ranking.
+- **Large corpora**: brute-force cosine, no ANN. Above ~50k chunks, use something else.
+- **As a product**: no UI, no PDF/Office parsing, no database, no conversation orchestration. For product-grade, look at LlamaIndex / LangChain / RAGFlow / Dify. What you get here is **200 lines you can read, change, and embed**.
 
 ---
 
-## 目录
+## Layout
 
 ```
-core/            单文件算法 + 测试 + 基准（最该先读这里）
-four_corpus/     多语料库运行版：build.py / ask.py / preflight.py
-polyglot/        六语言移植 + verify.sh（输出必须逐字节一致）
-plugin/dsh/      DeepSeek Harness 插件（自动注入 + rag_search 工具）
-spec/SPEC.md     唯一实现契约
-data/sample/     core/demo 用的示例语料（虚构的 NAS 迁移记录）
-LICENSE          BUSL 1.1（算法与 Python 实现）
-LICENSES/        plugin/ 用 MIT
+core/            single-file algorithm + tests + benchmark (read this first)
+four_corpus/     multi-corpus runtime: build.py / ask.py / preflight.py
+polyglot/        six ports + verify.sh (output must be byte-identical)
+plugin/dsh/      DeepSeek Harness plugin (auto-inject + rag_search tool)
+spec/SPEC.md     the only implementation contract
+data/sample/     sample corpus for core/demo (fictional NAS migration notes)
+LICENSE          BUSL 1.1 (algorithm and Python implementation)
+LICENSES/        plugin/ is MIT
 ```
 
 ---
 
-## 快速开始
+## Quick start
 
-**1. 只看算法（无依赖）**
+**1. Read the algorithm only (no dependencies)**
 
 ```bash
 cd core && python demo.py
 python -m unittest discover -s tests -v
 ```
 
-**2. 多语料库（需要 bge-m3，走 Ollama）**
+**2. Multi-corpus (needs bge-m3 via Ollama)**
 
 ```bash
 cd four_corpus
-cp config.example.json config.json      # 改成你自己的四个目录
-python build.py --corpus code           # 每库建一次
-python ask.py --corpus code "为什么 apt 拉包 502"
-python preflight.py "开工前该看什么"     # 三个库一起查，带来源标注
+cp config.example.json config.json      # point it at your own four directories
+python build.py --corpus code           # build each corpus once
+python ask.py --corpus code "why does apt fail with 502"
+python preflight.py "what should I read before starting"   # all three corpora, labelled by source
 ```
 
-**3. 六语言一致性**
+**3. Six-language consistency**
 
 ```bash
-cd polyglot && ./verify.sh              # 需要本地有 gcc/g++/go/javac/node/python3
+cd polyglot && ./verify.sh              # needs gcc/g++/go/javac/node/python3 locally
 ```
 
-**4. DSH 插件**
+**4. DSH plugin**
 
 ```bash
-# 把 plugin/dsh 目录加到 DSH profile 的 plugins 下，然后在 cordis.patch.yml 里
-# 指向 four_corpus/preflight.py 和你的 python 解释器
+# add plugin/dsh to your DSH profile's plugins, then point cordis.patch.yml
+# at four_corpus/preflight.py and your python interpreter
 ```
 
 ---
 
-## 许可
+## License
 
-算法与 Python 实现：[BUSL 1.1](LICENSE)（个人 / 研究 / 内部非商业免费；Change Date 2030-11-16，
-转 Apache-2.0）。`plugin/` 目录单独用 [MIT](LICENSES/plugin-MIT.txt)。
+Algorithm and Python implementation: [BUSL 1.1](LICENSE) — free for personal, research and internal non-commercial use; Change Date 2030-11-16, converting to Apache-2.0. The `plugin/` directory is [MIT](LICENSES/plugin-MIT.txt) separately.
 
 ---
 
-## 这个仓合并自
+## What this repo merges
 
-`decay-rag`（单文件核心）、`decay-rag-lite`（多语料库）、`decay-rag-polyglot`（六语言）、
-`dsh-go-local-recall` / `dsh-rag-memory`（插件）。合并原因很简单：**它们是同一件事的四种形态，
-分仓库只会让读的人多跳四次。** 旧仓库保留只读存档。
+`decay-rag` (single-file core), `decay-rag-lite` (multi-corpus), `decay-rag-polyglot` (six languages), and `dsh-go-local-recall` / `dsh-rag-memory` (the plugin). The reason is simple: **they are four shapes of one idea, and splitting them only made readers jump four times.** The old repositories remain as read-only archives.
