@@ -1,0 +1,10 @@
+- insert:
+    - id: preflight
+      name: dsh-preflight
+      config:
+        # 步骤开始前自动检索方法库并注入（原来的行为）
+        inject: true
+        k: 3
+        # 额外的 rag_search 工具，让模型可以换一种说法再查一次
+        tool: true
+        toolK: 4

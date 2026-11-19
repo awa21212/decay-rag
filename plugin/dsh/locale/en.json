@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Method library memory",
+    "description": "Retrieves the local method library before each step and exposes it as a rag_search tool. Covers code lessons, finance notes, task state and the user's diary.",
+    "detail": "docs/DETAIL.md"
+  }
+}

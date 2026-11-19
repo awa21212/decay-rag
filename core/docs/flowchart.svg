@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="760" viewBox="0 0 880 760">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"/>
+    </marker>
+    <style>
+      .box   { fill:#eef2ff; stroke:#6366f1; stroke-width:1.6; rx:8; }
+      .warn  { fill:#fff7ed; stroke:#f59e0b; stroke-width:1.6; rx:8; }
+      .out   { fill:#ecfdf5; stroke:#10b981; stroke-width:1.6; rx:8; }
+      .core  { fill:#fef2f2; stroke:#ef4444; stroke-width:1.8; rx:8; }
+      .t     { font-family:"Microsoft YaHei","PingFang SC",sans-serif; font-size:15px; fill:#111827; }
+      .s     { font-family:"Microsoft YaHei","PingFang SC",sans-serif; font-size:12.5px; fill:#4b5563; }
+      .edge  { stroke:#4b5563; stroke-width:1.6; fill:none; marker-end:url(#arrow); }
+      .label { font-family:"Microsoft YaHei",sans-serif; font-size:12px; fill:#6b7280; }
+    </style>
+  </defs>
+
+  <text x="440" y="34" text-anchor="middle" class="t" style="font-size:19px;font-weight:600">decay-rag：块级时间戳 + 指数衰减的检索流程</text>
+
+  <!-- 1 -->
+  <rect x="330" y="58" width="220" height="46" class="box"/>
+  <text x="440" y="87" text-anchor="middle" class="t">语料文件（md / txt）</text>
+
+  <!-- 2 -->
+  <rect x="330" y="132" width="220" height="46" class="box"/>
+  <text x="440" y="161" text-anchor="middle" class="t">切块：700 字 / 重叠 120</text>
+  <path class="edge" d="M440 104 L440 130"/>
+
+  <!-- 3 判定 -->
+  <rect x="300" y="206" width="280" height="52" class="warn"/>
+  <text x="440" y="228" text-anchor="middle" class="t">块的时间戳 τ（三选一）</text>
+  <text x="440" y="247" text-anchor="middle" class="s">不是文件 mtime —— 这是命门</text>
+  <path class="edge" d="M440 178 L440 204"/>
+
+  <!-- 三个分支 -->
+  <rect x="40" y="300" width="230" height="64" class="warn"/>
+  <text x="155" y="324" text-anchor="middle" class="t">① 文件名里的日期</text>
+  <text x="155" y="345" text-anchor="middle" class="s">复盘_2026-03-31.md</text>
+  <path class="edge" d="M340 258 L170 298"/>
+
+  <rect x="320" y="300" width="240" height="64" class="warn"/>
+  <text x="440" y="324" text-anchor="middle" class="t">② 离 mtime 最近的日期</text>
+  <text x="440" y="345" text-anchor="middle" class="s">避开正文里的 2019-01-02</text>
+  <path class="edge" d="M440 258 L440 298"/>
+
+  <rect x="610" y="300" width="230" height="64" class="warn"/>
+  <text x="725" y="324" text-anchor="middle" class="t">③ mtime 兜底</text>
+  <text x="725" y="345" text-anchor="middle" class="s">全文没有日期时</text>
+  <path class="edge" d="M540 258 L710 298"/>
+
+  <!-- 4 -->
+  <rect x="300" y="400" width="280" height="50" class="box"/>
+  <text x="440" y="430" text-anchor="middle" class="t">稀疏向量：字符 2/3-gram 计数</text>
+  <path class="edge" d="M155 364 L300 420"/>
+  <path class="edge" d="M440 364 L440 398"/>
+  <path class="edge" d="M725 364 L580 420"/>
+
+  <!-- 5a 相似度 -->
+  <rect x="90" y="486" width="300" height="56" class="box"/>
+  <text x="240" y="510" text-anchor="middle" class="t">相似度 = 0.72×余弦 + 0.28×字面重合</text>
+  <text x="240" y="530" text-anchor="middle" class="s">内容有多像</text>
+  <path class="edge" d="M380 450 L248 484"/>
+
+  <!-- 5b 衰减 -->
+  <rect x="490" y="486" width="300" height="56" class="core"/>
+  <text x="640" y="510" text-anchor="middle" class="t">衰减 = 0.5 ^ (τ / 半衰期)</text>
+  <text x="640" y="530" text-anchor="middle" class="s">越老权重越低，默认半衰期 30 天</text>
+  <path class="edge" d="M440 364 L640 484"/>
+
+  <!-- 6 -->
+  <rect x="290" y="572" width="300" height="52" class="out"/>
+  <text x="440" y="596" text-anchor="middle" class="t">综合分 = 0.75×相似度 + 0.25×衰减</text>
+  <text x="440" y="615" text-anchor="middle" class="s">--half-life 可调，--no-decay 对照</text>
+  <path class="edge" d="M340 544 L400 570"/>
+  <path class="edge" d="M560 544 L490 570"/>
+
+  <!-- 7 -->
+  <rect x="300" y="652" width="280" height="52" class="out"/>
+  <text x="440" y="676" text-anchor="middle" class="t">排序 → 输出（带时间戳 + 分数拆解）</text>
+  <text x="440" y="695" text-anchor="middle" class="s">--hours / --since / --newest / --current-only</text>
+  <path class="edge" d="M440 624 L440 650"/>
+
+  <text x="440" y="736" text-anchor="middle" class="label">纯 Python 标准库 · 零依赖 · demo.py 可一键复现</text>
+</svg>

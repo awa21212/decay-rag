@@ -1,0 +1,13 @@
+# indexes / caches
+index_*/
+idx.json
+__pycache__/
+*.pyc
+node_modules/
+
+# local config and run artifacts
+config.json
+bench/results.json
+*.exe
+*.o
+*.class

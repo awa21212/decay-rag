@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "方法库记忆",
+    "description": "每一步开始前先检索本地方法库并把命中的经验注入上下文，同时提供 rag_search 工具。覆盖代码坑、量化笔记、任务状态和日记。",
+    "detail": "docs/DETAIL.md"
+  }
+}
